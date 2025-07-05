@@ -15,7 +15,7 @@ import (
 	"github.com/apple/pkl-go/pkl"
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/v2"
-	"github.com/niuleh/hlcli/internal/framework"
+	"github.com/niule-eu/hlcli/internal/framework"
 )
 
 var (

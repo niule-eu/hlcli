@@ -1,4 +1,4 @@
-module github.com/niuleh/hlcli
+module github.com/niule-eu/hlcli
 
 require (
 	github.com/adrg/xdg v0.5.3

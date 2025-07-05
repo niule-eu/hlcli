@@ -12,11 +12,11 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/niuleh/hlcli/internal/config"
-	"github.com/niuleh/hlcli/internal/framework"
-	"github.com/niuleh/hlcli/internal/keygen"
-	"github.com/niuleh/hlcli/internal/netconf"
-	"github.com/niuleh/hlcli/internal/render"
+	"github.com/niule-eu/hlcli/internal/config"
+	"github.com/niule-eu/hlcli/internal/framework"
+	"github.com/niule-eu/hlcli/internal/keygen"
+	"github.com/niule-eu/hlcli/internal/netconf"
+	"github.com/niule-eu/hlcli/internal/render"
 
 	"github.com/adrg/xdg"
 	"github.com/knadh/koanf/v2"

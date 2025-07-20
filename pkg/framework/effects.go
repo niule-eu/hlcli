@@ -2,6 +2,7 @@ package framework
 
 import (
 	"bufio"
+	"log"
 	"os"
 )
 
@@ -56,6 +57,21 @@ type NoOp struct{}
 
 func (n *NoOp) Apply() error {
 	return nil
+}
+
+type StdOutIO struct {
+	Message string
+}
+
+func (sdtoutio *StdOutIO) Apply() error {
+	log.Println(sdtoutio.Message)
+	return nil
+}
+
+func NewStdOutIO(msg string) *StdOutIO {
+	return &StdOutIO{
+		Message: msg,
+	}
 }
 
 func Invoke(effect ...Effect) error {

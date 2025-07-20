@@ -12,7 +12,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/niule-eu/hlcli/internal/framework"
+	"github.com/niule-eu/hlcli/pkg/framework"
 	"golang.org/x/crypto/ssh"
 )
 

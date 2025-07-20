@@ -12,8 +12,9 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/niule-eu/hlcli/internal/config"
-	"github.com/niule-eu/hlcli/internal/framework"
+	"github.com/niule-eu/hlcli/pkg/config"
+	"github.com/niule-eu/hlcli/pkg/framework"
+	"github.com/niule-eu/hlcli/pkg/deps"
 	"github.com/niule-eu/hlcli/internal/keygen"
 	"github.com/niule-eu/hlcli/internal/netconf"
 	"github.com/niule-eu/hlcli/internal/render"
@@ -203,7 +204,7 @@ func no_config() error {
 	if err != nil {
 		return err
 	}
-	defaultConfig, err := yaml.Marshal(DefaultConfig{Commands: map[string]CommandConfig{"root": CommandConfig{}}})
+	defaultConfig, err := yaml.Marshal(DefaultConfig{Commands: map[string]CommandConfig{"root": {}}})
 	if err != nil {
 		return err
 	}
@@ -216,6 +217,18 @@ func no_config() error {
 }
 
 func get_default_config_path() string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		log.Fatal(err)
+	}
+	cfg_path := filepath.Join(cwd, ".hlcli.yaml")
+	_, err = os.Stat(cfg_path)
+	if err == nil {
+		return cfg_path
+	} else {
+		log.Println("No config file found in current working directory. Searching for config file in XDG directories.")
+	}
+	
 	p, err := xdg.SearchConfigFile("hlcli/config.yaml")
 	if err != nil {
 		err = no_config()
@@ -224,6 +237,7 @@ func get_default_config_path() string {
 		}
 		return get_default_config_path()
 	}
+	log.Printf("Using config at %s", p)
 	return p
 }
 
@@ -259,6 +273,49 @@ func load_config(cliConfig *koanf.Koanf, sopsSecrets *koanf.Koanf) cli.BeforeFun
 	}
 }
 
+func ghrelease_cmd(secrets *koanf.Koanf) *cli.Command {
+	return  &cli.Command{
+		Name: "deps",
+		Flags: []cli.Flag{
+			&cli.StringFlag {
+				Name: "owner",
+				Required: true,
+			},
+			&cli.StringFlag {
+				Name: "repo",
+				Required: true,
+			},
+			&cli.StringFlag {
+				Name: "pattern",
+				Required: true,
+			},
+			&cli.StringFlag {
+				Name: "checksums-pattern",
+				Required: false,
+			},
+			&cli.StringFlag {
+				Name: "token-ref",
+				Required: true,
+			},
+		},
+		Action: func(ctx context.Context, c *cli.Command) error {
+			checksumsPattern := c.String("checksums-pattern")
+			eff, err := deps.GetRelease(
+				secrets.String(c.String("token-ref")), 
+				deps.ReleaseAssetQuery {
+					Owner: c.String("owner"),
+					Repo: c.String("repo"),
+					Pattern: c.String("pattern"),
+					ChecksumsPattern: &checksumsPattern,
+			})
+			if err != nil {
+				return err
+			}
+			return framework.Invoke(eff)
+		},
+	}
+}
+
 func main() {
 	koanfConf := koanf.Conf{
 		Delim:       ".",
@@ -284,6 +341,7 @@ func main() {
 			keygen_cmd(),
 			netconf_cmd(),
 			renderPklCommand(sopsSecrets),
+			ghrelease_cmd(sopsSecrets),
 			{
 				Name:            "tofu",
 				Aliases:         []string{"tf"},

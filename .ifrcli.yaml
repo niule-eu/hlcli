@@ -1,6 +1,0 @@
-commands:
-  root:
-    secrets: ../secrets.yaml
-  # tofu:
-  #   secrets: ../secrets.yaml
-  #   merge: false

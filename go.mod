@@ -12,8 +12,8 @@ require (
 	github.com/knadh/koanf/v2 v2.1.2
 	github.com/nemith/netconf v0.0.2
 	github.com/urfave/cli/v3 v3.0.0-beta1
+	go.yaml.in/yaml/v3 v3.0.4
 	golang.org/x/crypto v0.32.0
-	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -136,6 +136,7 @@ require (
 	google.golang.org/grpc v1.70.0 // indirect
 	google.golang.org/protobuf v1.36.4 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
 go 1.23.5

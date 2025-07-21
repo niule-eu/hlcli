@@ -6,8 +6,6 @@ import (
 	"path"
 	"path/filepath"
 
-	"gopkg.in/yaml.v3"
-
 	"log"
 	"os"
 	"os/exec"
@@ -22,6 +20,7 @@ import (
 	"github.com/adrg/xdg"
 	"github.com/knadh/koanf/v2"
 	"github.com/urfave/cli/v3"
+	"go.yaml.in/yaml/v3"
 
 	"github.com/apple/pkl-go/pkl"
 )
@@ -275,43 +274,67 @@ func load_config(cliConfig *koanf.Koanf, sopsSecrets *koanf.Koanf) cli.BeforeFun
 
 func ghrelease_cmd(secrets *koanf.Koanf) *cli.Command {
 	return  &cli.Command{
-		Name: "deps",
+		Name: "gh-release",
 		Flags: []cli.Flag{
-			&cli.StringFlag {
-				Name: "owner",
-				Required: true,
-			},
-			&cli.StringFlag {
-				Name: "repo",
-				Required: true,
-			},
-			&cli.StringFlag {
-				Name: "pattern",
-				Required: true,
-			},
-			&cli.StringFlag {
-				Name: "checksums-pattern",
-				Required: false,
-			},
-			&cli.StringFlag {
-				Name: "token-ref",
-				Required: true,
-			},
+			&cli.StringFlag { Name: "token-ref", Aliases: []string{"tref", "tr"}, Required: true, },
 		},
-		Action: func(ctx context.Context, c *cli.Command) error {
-			checksumsPattern := c.String("checksums-pattern")
-			eff, err := deps.GetRelease(
-				secrets.String(c.String("token-ref")), 
-				deps.ReleaseAssetQuery {
-					Owner: c.String("owner"),
-					Repo: c.String("repo"),
-					Pattern: c.String("pattern"),
-					ChecksumsPattern: &checksumsPattern,
-			})
-			if err != nil {
-				return err
-			}
-			return framework.Invoke(eff)
+		Commands: []*cli.Command{
+			{
+				Name: "get-one",
+				Flags: []cli.Flag {
+					&cli.StringFlag { Name: "owner", Required: true, },
+					&cli.StringFlag { Name: "repo", Required: true, },
+					&cli.StringFlag { Name: "pattern", Required: true, },
+					&cli.StringFlag { Name: "checksums-pattern", Required: false, },
+					&cli.StringFlag { Name: "prefix", Aliases: []string{"pre"}, Value: "", },
+				},
+				Action: func(ctx context.Context, c *cli.Command) error {
+					checksumsPattern := c.String("checksums-pattern")
+					res, err := deps.GetRelease(
+						secrets.String(c.String("token-ref")), 
+						deps.ReleaseAssetQuery {
+							Owner: c.String("owner"),
+							Repo: c.String("repo"),
+							Pattern: c.String("pattern"),
+							ChecksumsPattern: &checksumsPattern,
+					})
+					if err != nil {
+						return err
+					}
+					log.Println(res)
+					return nil
+				},
+			},
+			{
+				Name: "get-many",
+				Flags: []cli.Flag {
+					&cli.StringFlag { Name: "queries-file", Aliases: []string{"q"}, Required: true},
+				},
+				Action: func(ctx context.Context, c *cli.Command) error {
+					queriesRaw, err := os.ReadFile(c.String("queries-file"))
+					if err != nil {
+						return err
+					}
+					var queries []deps.ReleaseAssetQuery
+					yaml.Unmarshal(queriesRaw, &queries)
+					for _, q := range queries {
+						res, err := deps.GetRelease(
+							secrets.String(c.String("token-ref")),
+							deps.ReleaseAssetQuery{
+								Owner: q.Owner,
+								Repo: q.Repo,
+								Pattern: q.Pattern,
+								ChecksumsPattern: q.ChecksumsPattern,
+							},
+						)
+						if err != nil {
+							return nil
+						}
+						log.Println(res)
+					}
+					return nil
+				},
+			},
 		},
 	}
 }

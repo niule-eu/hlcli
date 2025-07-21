@@ -10,25 +10,30 @@ import (
 	"time"
 
 	"github.com/google/go-github/v73/github"
-	"github.com/niule-eu/hlcli/pkg/framework"
 )
 
 type ReleaseAssetQuery struct {
-	Owner string
-	Repo string
-	Pattern string
-	ChecksumsPattern *string
+	Owner            string  `yaml:"owner"`
+	Repo             string  `yaml:"repo"`
+	Pattern          string  `yaml:"pattern"`
+	ChecksumsPattern *string `yaml:"checksums_pattern,omitempty"`
 }
 
 type Checksum struct {
 	Value string
 }
 
+type ReleaseAssetResult struct {
+	Tag  string
+	Url  string
+	Hash *Checksum
+}
+
 func getAssetByPattern(assets []*github.ReleaseAsset, pattern string) *github.ReleaseAsset {
 	assetIdx := slices.IndexFunc(
-		assets, 
+		assets,
 		func(v *github.ReleaseAsset) bool {
-			matched, err := regexp.MatchString(pattern, *v.Name )
+			matched, err := regexp.MatchString(pattern, *v.Name)
 			if err != nil {
 				return false
 			}
@@ -69,9 +74,9 @@ func getChecksum(assetName string, assets []*github.ReleaseAsset, checksumsPatte
 	re := regexp.MustCompile(`\s+`)
 	var res Checksum
 	for scanner.Scan() {
-		line := re.Split(scanner.Text(), -1)
-		if line[1] == assetName {
-			res = Checksum{Value: line[0]}
+		parts := re.Split(scanner.Text(), -1)
+		if parts[1] == assetName {
+			res = Checksum{Value: parts[0]}
 			break
 		}
 	}
@@ -81,7 +86,7 @@ func getChecksum(assetName string, assets []*github.ReleaseAsset, checksumsPatte
 	return &res, nil
 }
 
-func GetRelease(token string, raq ReleaseAssetQuery) (framework.Effect, error) {
+func GetRelease(token string, raq ReleaseAssetQuery) (*ReleaseAssetResult, error) {
 	repos := github.NewClient(nil).WithAuthToken(token).Repositories
 	d, err := time.ParseDuration("30s")
 	if err != nil {
@@ -101,5 +106,5 @@ func GetRelease(token string, raq ReleaseAssetQuery) (framework.Effect, error) {
 	if err != nil {
 		return nil, err
 	}
-	return framework.NewStdOutIO(fmt.Sprintf("\nTAG=%s\nURL=%s\nHASH=%s", *release.TagName, *asset.URL, checksum.Value)), nil
+	return &ReleaseAssetResult{Tag: *release.TagName, Url: *asset.URL, Hash: checksum}, nil
 }

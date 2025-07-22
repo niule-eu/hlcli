@@ -26,7 +26,7 @@ func NewDefaultFileWriteIO(path string, content []byte) *FileWriteIO {
 	}
 }
 
-func (fw *FileWriteIO) Apply() error {
+func (fw FileWriteIO) Apply() error {
 	f, err := os.OpenFile(fw.Path, fw.Mode, fw.Permissions)
 	if err != nil {
 		return err

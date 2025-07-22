@@ -12,10 +12,10 @@ import (
 
 	"github.com/niule-eu/hlcli/pkg/config"
 	"github.com/niule-eu/hlcli/pkg/framework"
-	"github.com/niule-eu/hlcli/pkg/deps"
 	"github.com/niule-eu/hlcli/internal/keygen"
 	"github.com/niule-eu/hlcli/internal/netconf"
 	"github.com/niule-eu/hlcli/internal/render"
+	"github.com/niule-eu/hlcli/internal/hlcli_cmd"
 
 	"github.com/adrg/xdg"
 	"github.com/knadh/koanf/v2"
@@ -272,73 +272,6 @@ func load_config(cliConfig *koanf.Koanf, sopsSecrets *koanf.Koanf) cli.BeforeFun
 	}
 }
 
-func ghrelease_cmd(secrets *koanf.Koanf) *cli.Command {
-	return  &cli.Command{
-		Name: "gh-release",
-		Flags: []cli.Flag{
-			&cli.StringFlag { Name: "token-ref", Aliases: []string{"tref", "tr"}, Required: true, },
-		},
-		Commands: []*cli.Command{
-			{
-				Name: "get-one",
-				Flags: []cli.Flag {
-					&cli.StringFlag { Name: "owner", Required: true, },
-					&cli.StringFlag { Name: "repo", Required: true, },
-					&cli.StringFlag { Name: "pattern", Required: true, },
-					&cli.StringFlag { Name: "checksums-pattern", Required: false, },
-					&cli.StringFlag { Name: "prefix", Aliases: []string{"pre"}, Value: "", },
-				},
-				Action: func(ctx context.Context, c *cli.Command) error {
-					checksumsPattern := c.String("checksums-pattern")
-					res, err := deps.GetRelease(
-						secrets.String(c.String("token-ref")), 
-						deps.ReleaseAssetQuery {
-							Owner: c.String("owner"),
-							Repo: c.String("repo"),
-							Pattern: c.String("pattern"),
-							ChecksumsPattern: &checksumsPattern,
-					})
-					if err != nil {
-						return err
-					}
-					log.Println(res)
-					return nil
-				},
-			},
-			{
-				Name: "get-many",
-				Flags: []cli.Flag {
-					&cli.StringFlag { Name: "queries-file", Aliases: []string{"q"}, Required: true},
-				},
-				Action: func(ctx context.Context, c *cli.Command) error {
-					queriesRaw, err := os.ReadFile(c.String("queries-file"))
-					if err != nil {
-						return err
-					}
-					var queries []deps.ReleaseAssetQuery
-					yaml.Unmarshal(queriesRaw, &queries)
-					for _, q := range queries {
-						res, err := deps.GetRelease(
-							secrets.String(c.String("token-ref")),
-							deps.ReleaseAssetQuery{
-								Owner: q.Owner,
-								Repo: q.Repo,
-								Pattern: q.Pattern,
-								ChecksumsPattern: q.ChecksumsPattern,
-							},
-						)
-						if err != nil {
-							return nil
-						}
-						log.Println(res)
-					}
-					return nil
-				},
-			},
-		},
-	}
-}
-
 func main() {
 	koanfConf := koanf.Conf{
 		Delim:       ".",
@@ -364,7 +297,7 @@ func main() {
 			keygen_cmd(),
 			netconf_cmd(),
 			renderPklCommand(sopsSecrets),
-			ghrelease_cmd(sopsSecrets),
+			hlcli_cmd.GhAssetCmd(sopsSecrets),
 			{
 				Name:            "tofu",
 				Aliases:         []string{"tf"},

@@ -1,4 +1,4 @@
-package deps
+package ghasset
 
 import (
 	"bufio"
@@ -24,6 +24,8 @@ type Checksum struct {
 }
 
 type ReleaseAssetResult struct {
+	Owner string
+	Repo string
 	Tag  string
 	Url  string
 	Hash *Checksum
@@ -86,7 +88,7 @@ func getChecksum(assetName string, assets []*github.ReleaseAsset, checksumsPatte
 	return &res, nil
 }
 
-func GetRelease(token string, raq ReleaseAssetQuery) (*ReleaseAssetResult, error) {
+func GetAsset(token string, raq ReleaseAssetQuery) (*ReleaseAssetResult, error) {
 	repos := github.NewClient(nil).WithAuthToken(token).Repositories
 	d, err := time.ParseDuration("30s")
 	if err != nil {
@@ -106,5 +108,11 @@ func GetRelease(token string, raq ReleaseAssetQuery) (*ReleaseAssetResult, error
 	if err != nil {
 		return nil, err
 	}
-	return &ReleaseAssetResult{Tag: *release.TagName, Url: *asset.URL, Hash: checksum}, nil
+	return &ReleaseAssetResult{
+		Tag: *release.TagName, 
+		Url: *asset.URL, 
+		Hash: checksum,
+		Owner: raq.Owner,
+		Repo:  raq.Repo,
+		}, nil
 }

@@ -16,6 +16,7 @@ import (
 	"os"
 
 	"github.com/apple/pkl-go/pkl"
+	"github.com/getsops/sops/v3/decrypt"
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/v2"
 	"github.com/niule-eu/hlcli/pkg/framework"
@@ -44,6 +45,27 @@ func (e *MultiplePklProjectFoundError) Error() string {
 		e.Module,
 		strings.Join(e.PklProjectFiles, "\n"),
 	)
+}
+
+type SopsBlobResourceReader struct{}
+
+func (r SopsBlobResourceReader) Scheme() string { return "sopsblob" }
+
+func (r SopsBlobResourceReader) IsGlobbable() bool { return false }
+
+func (r SopsBlobResourceReader) HasHierarchicalUris() bool { return false }
+
+func (r SopsBlobResourceReader) ListElements(url url.URL) ([]pkl.PathElement, error) { return nil, nil }
+
+func (r SopsBlobResourceReader) Read(url url.URL) ([]byte, error) {
+
+	p := url.Path[1:]
+	secretsBytes, err := decrypt.File("/"+p, "binary")
+	if err != nil {
+		return nil, err
+	}
+
+	return secretsBytes, nil
 }
 
 type SopsResourceReader struct {
@@ -92,6 +114,7 @@ func RenderPkl(params RenderPklParams, secrets *koanf.Koanf) (framework.Effect, 
 		pkl.PreconfiguredOptions,
 		func(options *pkl.EvaluatorOptions) {
 			options.ResourceReaders = append(options.ResourceReaders, SopsResourceReader{secrets: secrets})
+			options.ResourceReaders = append(options.ResourceReaders, SopsBlobResourceReader{})
 			options.AllowedResources = append(options.AllowedResources, "sops")
 		},
 	)

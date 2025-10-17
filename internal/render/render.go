@@ -1,8 +1,11 @@
 package render
 
 import (
+	"archive/tar"
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"net/url"
@@ -92,6 +95,49 @@ func (r SopsResourceReader) Read(url url.URL) ([]byte, error) {
 	}
 }
 
+type SopsTarResourceReader struct{}
+
+func (r SopsTarResourceReader) Scheme() string { return "sopstar" }
+
+func (r SopsTarResourceReader) IsGlobbable() bool { return false }
+
+func (r SopsTarResourceReader) HasHierarchicalUris() bool { return false }
+
+func (r SopsTarResourceReader) ListElements(url url.URL) ([]pkl.PathElement, error) { return nil, nil }
+
+func (r SopsTarResourceReader) Read(url url.URL) ([]byte, error) {
+
+	fmt.Println(url.Path)
+	log.Println(url.Path)
+	p := url.Path
+
+	fragment := url.Fragment
+	secretsBytes, err := decrypt.File(p, "binary")
+	if err != nil {
+		return nil, err
+	}
+	buf := bytes.NewBuffer(secretsBytes)
+	tr := tar.NewReader(buf)
+	fileBytes := &bytes.Buffer{}
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		if hdr.Name == fragment {
+			_, err := io.Copy(fileBytes, tr)
+			if err != nil {
+				return nil, err
+			}
+			return fileBytes.Bytes(), nil
+		}
+	}
+	return secretsBytes, nil
+}
+
 type RenderPklParams struct {
 	PklFile        string
 	OutputFile     string
@@ -101,24 +147,32 @@ type RenderPklParams struct {
 
 func RenderPkl(params RenderPklParams, secrets *koanf.Koanf) (framework.Effect, error) {
 	var err error
-
-	pkl_project_root, err := findPklProjectRoot(params.PklFile, params.PklProjectFile)
-	if err != nil {
-		return nil, err
-	}
+	var evaluator_err error
+	var evaluator pkl.Evaluator
 
 	evaluatorManager := pkl.NewEvaluatorManager()
-	evaluator, err := evaluatorManager.NewProjectEvaluator(
-		context.Background(),
-		pkl_project_root,
-		pkl.PreconfiguredOptions,
-		func(options *pkl.EvaluatorOptions) {
-			options.ResourceReaders = append(options.ResourceReaders, SopsResourceReader{secrets: secrets})
-			options.ResourceReaders = append(options.ResourceReaders, SopsBlobResourceReader{})
-			options.AllowedResources = append(options.AllowedResources, "sops")
-		},
-	)
-	if err != nil {
+
+	pkl_project_root, err := findPklProjectRoot(params.PklFile, params.PklProjectFile)
+	if _, ok := err.(*PklProjectNotFoundError); ok {
+		evaluator, evaluator_err = evaluatorManager.NewEvaluator(
+			context.Background(),
+			pkl.PreconfiguredOptions,
+			evaluatorOptions(secrets),
+		)
+		if evaluator_err != nil {
+			return nil, evaluator_err
+		}
+	} else if err == nil {
+		evaluator, evaluator_err = evaluatorManager.NewProjectEvaluator(
+			context.Background(),
+			pkl_project_root,
+			pkl.PreconfiguredOptions,
+			evaluatorOptions(secrets),
+		)
+		if evaluator_err != nil {
+			return nil, evaluator_err
+		}
+	} else {
 		return nil, err
 	}
 	defer evaluator.Close()
@@ -129,6 +183,17 @@ func RenderPkl(params RenderPklParams, secrets *koanf.Koanf) (framework.Effect, 
 	}
 
 	return framework.NewDefaultFileWriteIO(params.OutputFile, []byte(data)), nil
+}
+
+func evaluatorOptions(secrets *koanf.Koanf) func(*pkl.EvaluatorOptions) {
+	return func(options *pkl.EvaluatorOptions) {
+		options.ResourceReaders = append(options.ResourceReaders, SopsResourceReader{secrets: secrets})
+		options.ResourceReaders = append(options.ResourceReaders, SopsBlobResourceReader{})
+		options.ResourceReaders = append(options.ResourceReaders, SopsTarResourceReader{})
+		options.AllowedResources = append(options.AllowedResources, "sops")
+		options.AllowedResources = append(options.AllowedResources, "sopsblob")
+		options.AllowedResources = append(options.AllowedResources, "sopstar")
+	}
 }
 
 func findPklProjectRoot(mod_path string, project_path string) (string, error) {

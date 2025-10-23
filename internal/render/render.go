@@ -62,8 +62,8 @@ func (r SopsBlobResourceReader) ListElements(url url.URL) ([]pkl.PathElement, er
 
 func (r SopsBlobResourceReader) Read(url url.URL) ([]byte, error) {
 
-	p := url.Path[1:]
-	secretsBytes, err := decrypt.File("/"+p, "binary")
+	p := url.Path
+	secretsBytes, err := decrypt.File(p, "binary")
 	if err != nil {
 		return nil, err
 	}
@@ -101,17 +101,15 @@ func (r SopsTarResourceReader) Scheme() string { return "sopstar" }
 
 func (r SopsTarResourceReader) IsGlobbable() bool { return false }
 
-func (r SopsTarResourceReader) HasHierarchicalUris() bool { return false }
+func (r SopsTarResourceReader) HasHierarchicalUris() bool { return true }
 
 func (r SopsTarResourceReader) ListElements(url url.URL) ([]pkl.PathElement, error) { return nil, nil }
 
 func (r SopsTarResourceReader) Read(url url.URL) ([]byte, error) {
 
-	fmt.Println(url.Path)
-	log.Println(url.Path)
 	p := url.Path
-
 	fragment := url.Fragment
+
 	secretsBytes, err := decrypt.File(p, "binary")
 	if err != nil {
 		return nil, err
@@ -141,6 +139,7 @@ func (r SopsTarResourceReader) Read(url url.URL) ([]byte, error) {
 type RenderPklParams struct {
 	PklFile        string
 	OutputFile     string
+	Expression     string
 	AllowedModules []string
 	PklProjectFile string
 }
@@ -177,12 +176,26 @@ func RenderPkl(params RenderPklParams, secrets *koanf.Koanf) (framework.Effect, 
 	}
 	defer evaluator.Close()
 
-	data, err := evaluator.EvaluateOutputText(context.Background(), pkl.FileSource(params.PklFile))
+	var data []byte
+	var out string
+	// Check if expression provided, if yes evaluate expression and write to file
+	if params.Expression != "" {
+		data, err = evaluator.EvaluateExpressionRaw(context.Background(), pkl.FileSource(params.PklFile), params.Expression)
+		if err != nil {
+			return nil, err
+		}
+		pkl.Unmarshal(data, data)
+	} else {
+		data, err = evaluator.EvaluateExpressionRaw(context.Background(), pkl.FileSource(params.PklFile), "output.text")
+		if err != nil {
+			return nil, err
+		}
+	}
+	err = pkl.Unmarshal(data, &out)
 	if err != nil {
 		return nil, err
 	}
-
-	return framework.NewDefaultFileWriteIO(params.OutputFile, []byte(data)), nil
+	return framework.NewDefaultFileWriteIO(params.OutputFile, []byte(out)), nil
 }
 
 func evaluatorOptions(secrets *koanf.Koanf) func(*pkl.EvaluatorOptions) {

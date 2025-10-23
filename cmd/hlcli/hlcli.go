@@ -10,12 +10,12 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/niule-eu/hlcli/pkg/config"
-	"github.com/niule-eu/hlcli/pkg/framework"
+	"github.com/niule-eu/hlcli/internal/hlcli_cmd"
 	"github.com/niule-eu/hlcli/internal/keygen"
 	"github.com/niule-eu/hlcli/internal/netconf"
 	"github.com/niule-eu/hlcli/internal/render"
-	"github.com/niule-eu/hlcli/internal/hlcli_cmd"
+	"github.com/niule-eu/hlcli/pkg/config"
+	"github.com/niule-eu/hlcli/pkg/framework"
 
 	"github.com/adrg/xdg"
 	"github.com/knadh/koanf/v2"
@@ -55,6 +55,10 @@ func renderPklCommand(secrets *koanf.Koanf) *cli.Command {
 				Required: true,
 			},
 			&cli.StringFlag{
+				Name:    "expression",
+				Aliases: []string{"x"},
+			},
+			&cli.StringFlag{
 				Name:    "output",
 				Aliases: []string{"o"},
 				Value:   "/dev/stdout",
@@ -73,6 +77,7 @@ func renderPklCommand(secrets *koanf.Koanf) *cli.Command {
 				render.RenderPkl(
 					render.RenderPklParams{
 						PklFile:    module,
+						Expression: c.String("expression"),
 						OutputFile: c.String("output"),
 					},
 					secrets,
@@ -227,7 +232,7 @@ func get_default_config_path() string {
 	} else {
 		log.Println("No config file found in current working directory. Searching for config file in XDG directories.")
 	}
-	
+
 	p, err := xdg.SearchConfigFile("hlcli/config.yaml")
 	if err != nil {
 		err = no_config()

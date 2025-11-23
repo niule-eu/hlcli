@@ -164,7 +164,10 @@ func RenderPkl(params RenderPklParams, secrets *koanf.Koanf) (framework.Effect, 
 	} else if err == nil {
 		evaluator, evaluator_err = evaluatorManager.NewProjectEvaluator(
 			context.Background(),
-			pkl_project_root,
+			&url.URL{
+				Scheme: "file",
+				Path:   pkl_project_root,
+			},
 			pkl.PreconfiguredOptions,
 			evaluatorOptions(secrets),
 		)
@@ -225,7 +228,8 @@ func findPklProjectRoot(mod_path string, project_path string) (string, error) {
 	pkl_project_file_paths := []string{}
 	filepath.WalkDir(wd, func(path string, d fs.DirEntry, err error) error {
 		if d.IsDir() {
-			if !strings.HasPrefix(mod_path, path) {
+			afterCut, isPrefix := strings.CutPrefix(mod_path, path)
+			if !(isPrefix && strings.HasPrefix(afterCut, "/")) {
 				return filepath.SkipDir
 			}
 		} else if d.Name() == "PklProject" {

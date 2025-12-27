@@ -2,6 +2,7 @@ package framework
 
 import (
 	"bufio"
+	"errors"
 	"log"
 	"os"
 )
@@ -74,11 +75,32 @@ func NewStdOutIO(msg string) *StdOutIO {
 	}
 }
 
+type CompoundEffect struct {
+	Effects []Effect
+}
+
+func (fw CompoundEffect) Apply() error {
+	var errs []error
+	for _, e := range fw.Effects {
+		if err := e.Apply(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if len(errs) != 0 {
+		return errors.Join(errs...)
+	}
+	return nil
+}
+
 func Invoke(effect ...Effect) error {
+	var errs []error
 	for _, e := range effect {
 		if err := e.Apply(); err != nil {
-			return err
+			errs = append(errs, err)
 		}
+	}
+	if len(errs) != 0 {
+		return errors.Join(errs...)
 	}
 	return nil
 }

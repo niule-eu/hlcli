@@ -48,11 +48,16 @@ func debugConfig(cfg *koanf.Koanf) *cli.Command {
 func renderPklCommand(secrets *koanf.Koanf) *cli.Command {
 	return &cli.Command{
 		Name: "render-pkl",
+		Arguments: []cli.Argument{
+			&cli.StringArg{
+				Name: "module",
+			},
+		},
 		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:     "module",
-				Aliases:  []string{"m"},
-				Required: true,
+			&cli.BoolFlag{
+				Name:    "files",
+				Aliases: []string{"f"},
+				Value:   false,
 			},
 			&cli.StringFlag{
 				Name:    "expression",
@@ -63,9 +68,13 @@ func renderPklCommand(secrets *koanf.Koanf) *cli.Command {
 				Aliases: []string{"o"},
 				Value:   "/dev/stdout",
 			},
+			&cli.StringFlag{
+				Name:    "project-file",
+				Aliases: []string{"p"},
+			},
 		},
 		Action: func(ctx context.Context, c *cli.Command) error {
-			var module = c.String("module")
+			var module = c.StringArg("module")
 			if !path.IsAbs(module) {
 				var err error
 				module, err = filepath.Abs(module)
@@ -76,16 +85,18 @@ func renderPklCommand(secrets *koanf.Koanf) *cli.Command {
 			effect, err :=
 				render.RenderPkl(
 					render.RenderPklParams{
-						PklFile:    module,
-						Expression: c.String("expression"),
-						OutputFile: c.String("output"),
+						PklFile:            module,
+						Expression:         c.String("expression"),
+						OutputFile:         c.String("output"),
+						MultipleFileOutput: c.Bool("files"),
+						PklProjectFile:     c.String("project-file"),
 					},
 					secrets,
 				)
 			if err != nil {
 				log.Fatal(err)
 			}
-			framework.Invoke(effect)
+			framework.Invoke(effect...)
 			if err != nil {
 				log.Fatal(err)
 			}

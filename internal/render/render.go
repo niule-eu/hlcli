@@ -137,14 +137,15 @@ func (r SopsTarResourceReader) Read(url url.URL) ([]byte, error) {
 }
 
 type RenderPklParams struct {
-	PklFile        string
-	OutputFile     string
-	Expression     string
-	AllowedModules []string
-	PklProjectFile string
+	PklFile            string
+	OutputFile         string
+	Expression         string
+	MultipleFileOutput bool
+	AllowedModules     []string
+	PklProjectFile     string
 }
 
-func RenderPkl(params RenderPklParams, secrets *koanf.Koanf) (framework.Effect, error) {
+func RenderPkl(params RenderPklParams, secrets *koanf.Koanf) ([]framework.Effect, error) {
 	var err error
 	var evaluator_err error
 	var evaluator pkl.Evaluator
@@ -179,26 +180,42 @@ func RenderPkl(params RenderPklParams, secrets *koanf.Koanf) (framework.Effect, 
 	}
 	defer evaluator.Close()
 
-	var data []byte
-	var out string
+	var effects []framework.Effect
+	// var files map[string][]byte
+
 	// Check if expression provided, if yes evaluate expression and write to file
 	if params.Expression != "" {
-		data, err = evaluator.EvaluateExpressionRaw(context.Background(), pkl.FileSource(params.PklFile), params.Expression)
+		data, err := evaluator.EvaluateExpressionRaw(context.Background(), pkl.FileSource(params.PklFile), params.Expression)
 		if err != nil {
 			return nil, err
 		}
-		pkl.Unmarshal(data, data)
+		effects, err = pklRawExpressionToFileIO(data, params.OutputFile)
+		if err != nil {
+			return nil, err
+		}
+
+	} else if params.MultipleFileOutput {
+		files, err := evaluator.EvaluateOutputFilesBytes(context.Background(), pkl.FileSource(params.PklFile))
+		if err != nil {
+			return nil, err
+		}
+		for k, v := range files {
+			eff := []framework.Effect{framework.NewDefaultFileWriteIO(filepath.Dir(params.PklFile)+"/"+k, v)}
+			effects = append(effects, eff...)
+		}
+
 	} else {
-		data, err = evaluator.EvaluateExpressionRaw(context.Background(), pkl.FileSource(params.PklFile), "output.text")
+		data, err := evaluator.EvaluateExpressionRaw(context.Background(), pkl.FileSource(params.PklFile), "output.text")
+		if err != nil {
+			return nil, err
+		}
+		effects, err = pklRawExpressionToFileIO(data, params.OutputFile)
 		if err != nil {
 			return nil, err
 		}
 	}
-	err = pkl.Unmarshal(data, &out)
-	if err != nil {
-		return nil, err
-	}
-	return framework.NewDefaultFileWriteIO(params.OutputFile, []byte(out)), nil
+
+	return effects, nil
 }
 
 func evaluatorOptions(secrets *koanf.Koanf) func(*pkl.EvaluatorOptions) {
@@ -249,4 +266,13 @@ func findPklProjectRoot(mod_path string, project_path string) (string, error) {
 			PklProjectFiles: pkl_project_file_paths,
 		}
 	}
+}
+
+func pklRawExpressionToFileIO(pkl_output []byte, path string) ([]framework.Effect, error) {
+	var out string
+	err := pkl.Unmarshal(pkl_output, &out)
+	if err != nil {
+		return nil, err
+	}
+	return []framework.Effect{framework.NewDefaultFileWriteIO(path, []byte(out))}, nil
 }

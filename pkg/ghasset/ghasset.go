@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"regexp"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/google/go-github/v73/github"
@@ -25,10 +26,10 @@ type Checksum struct {
 
 type ReleaseAssetResult struct {
 	Owner string
-	Repo string
-	Tag  string
-	Url  string
-	Hash *Checksum
+	Repo  string
+	Tag   string
+	Url   string
+	Hash  *Checksum
 }
 
 func getAssetByPattern(assets []*github.ReleaseAsset, pattern string) *github.ReleaseAsset {
@@ -77,7 +78,7 @@ func getChecksum(assetName string, assets []*github.ReleaseAsset, checksumsPatte
 	var res Checksum
 	for scanner.Scan() {
 		parts := re.Split(scanner.Text(), -1)
-		if parts[1] == assetName {
+		if strings.Contains(parts[1], assetName) {
 			res = Checksum{Value: parts[0]}
 			break
 		}
@@ -109,10 +110,10 @@ func GetAsset(token string, raq ReleaseAssetQuery) (*ReleaseAssetResult, error) 
 		return nil, err
 	}
 	return &ReleaseAssetResult{
-		Tag: *release.TagName, 
-		Url: *asset.URL, 
-		Hash: checksum,
+		Tag:   *release.TagName,
+		Url:   *asset.URL,
+		Hash:  checksum,
 		Owner: raq.Owner,
 		Repo:  raq.Repo,
-		}, nil
+	}, nil
 }

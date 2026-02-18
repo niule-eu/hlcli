@@ -1,0 +1,30 @@
+# Ko configuration for hlcli
+# This file configures how ko builds the hlcli container image
+
+# Default build configuration
+defaultPlatforms:
+  - linux/amd64
+
+# Base image configuration
+defaultBaseImage: gcr.io/distroless/static-debian13:nonroot
+baseImageOverrides:
+  # Use distroless debian13 as base for production
+  github.com/niule-eu/hlcli: gcr.io/distroless/static-debian13:nonroot
+
+# Build configuration for hlcli
+builds:
+  - id: hlcli
+    main: ./cmd/hlcli
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+    env:
+      - CGO_ENABLED=0
+    labels:
+      org.opencontainers.image.source: https://github.com/niule-eu/hlcli
+      org.opencontainers.image.title: hlcli
+
+
+# SBOM generation
+sbom: spdx

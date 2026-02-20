@@ -16,7 +16,7 @@ jobs:
     if: github.event.base_ref == 'refs/heads/main'
     
     permissions:
-      contents: read
+      contents: write
       packages: write
     
     steps:

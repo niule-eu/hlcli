@@ -1,0 +1,70 @@
+# .goreleaser.yml
+project_name: hlcli
+
+env:
+  - CGO_ENABLED=0
+
+# Build customization
+builds:
+  - id: default
+    # Binary name
+    binary: "{{ .ProjectName }}"
+    # Main module path
+    main: ./cmd/hlcli
+    # GOOS list to build for
+    goos:
+      - linux
+      - darwin
+    # GOARCH list to build for
+    goarch:
+      - amd64
+      - arm64
+    # Set modified timestamp to ensure reproducible builds
+    mod_timestamp: '{{ .CommitTimestamp }}'
+    # Flags passed to `go build`
+    flags:
+      - -trimpath
+    # LDFlags for the linker
+    ldflags:
+      - -s -w
+    
+
+# Binary customization
+archives:
+  - ids: 
+      - default
+    formats: 
+      - binary
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+kos:
+  - build: default
+    repositories: 
+    - 'ghcr.io/{{ .Env.GITHUB_REPOSITORY }}'
+    tags:
+      - "{{.Version}}"
+      - latest
+      - "{{.Tag}}"
+    bare: true
+    platforms:
+      - linux/amd64
+      - linux/arm64
+
+# Checksums
+checksum:
+  name_template: 'checksums.txt'
+
+# GitHub releases
+release:
+  # GitHub repository
+  github:
+    owner: niule-eu
+    name: hlcli
+  # Release name template
+  name_template: '{{ .Tag }}'
+  # Whether to remove existing draft releases with the same name
+  replace_existing_draft: true
+  # Whether to skip publishing the release
+  draft: false
+  # Whether to skip uploading artifacts
+  skip_upload: false

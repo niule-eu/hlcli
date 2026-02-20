@@ -5,7 +5,7 @@ version: 2
 
 env:
   - CGO_ENABLED=0
-  - KO_DOCKER_REPO="ghcr.io/{{ .Env.GITHUB_REPOSITORY }}"
+  - KO_DOCKER_REPO=ghcr.io/{{ .Env.GITHUB_REPOSITORY }}
 
 # Build customization
 builds:

@@ -72,6 +72,12 @@ func renderPklCommand(secrets *koanf.Koanf) *cli.Command {
 				Name:    "project-file",
 				Aliases: []string{"p"},
 			},
+			&cli.BoolFlag{
+				Name:    "sops",
+				Aliases: []string{"s"},
+				Value:   false,
+				Usage:   "Encrypt output with SOPS binary (plaintext never written to disk)",
+			},
 		},
 		Action: func(ctx context.Context, c *cli.Command) error {
 			var module = c.StringArg("module")
@@ -90,13 +96,14 @@ func renderPklCommand(secrets *koanf.Koanf) *cli.Command {
 						OutputFile:         c.String("output"),
 						MultipleFileOutput: c.Bool("files"),
 						PklProjectFile:     c.String("project-file"),
+						EncryptWithSops:    c.Bool("sops"),
 					},
 					secrets,
 				)
 			if err != nil {
 				log.Fatal(err)
 			}
-			framework.Invoke(effect...)
+			err = framework.Invoke(effect...)
 			if err != nil {
 				log.Fatal(err)
 			}

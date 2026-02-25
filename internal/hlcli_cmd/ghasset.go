@@ -25,7 +25,7 @@ func writeAsset(path string, assets ...*ghasset.ReleaseAssetResult) (framework.E
 		)
 		parts := []string{prefix, "TAG=", asset.Tag, "\n", prefix, "URL=", asset.Url, "\n"}
 		if asset.Hash != nil {
-			parts = append(parts, prefix, "HASH=", asset.Hash.Value,  "\n")
+			parts = append(parts, prefix, "HASH=", asset.Hash.Value, "\n")
 		}
 		for _, part := range parts {
 			_, err := b.WriteString(part)
@@ -34,36 +34,37 @@ func writeAsset(path string, assets ...*ghasset.ReleaseAssetResult) (framework.E
 			}
 		}
 	}
-	res := framework.NewDefaultFileWriteIO(path, []byte(b.String()))
+	content := []byte(b.String())
+	res := framework.NewDefaultFileWriteIO(path, &content)
 	return res, nil
 }
 
 func GhAssetCmd(secrets *koanf.Koanf) *cli.Command {
-	return  &cli.Command{
+	return &cli.Command{
 		Name: "gh-asset",
 		Flags: []cli.Flag{
-			&cli.StringFlag { Name: "token-ref", Aliases: []string{"tref", "tr"}, Required: true, },
+			&cli.StringFlag{Name: "token-ref", Aliases: []string{"tref", "tr"}, Required: true},
 		},
 		Commands: []*cli.Command{
 			{
 				Name: "get-one",
-				Flags: []cli.Flag {
-					&cli.StringFlag { Name: "owner", Required: true, },
-					&cli.StringFlag { Name: "repo", Required: true, },
-					&cli.StringFlag { Name: "pattern", Required: true, },
-					&cli.StringFlag { Name: "checksums-pattern", Required: false, },
-					&cli.StringFlag { Name: "prefix", Value: "", },
+				Flags: []cli.Flag{
+					&cli.StringFlag{Name: "owner", Required: true},
+					&cli.StringFlag{Name: "repo", Required: true},
+					&cli.StringFlag{Name: "pattern", Required: true},
+					&cli.StringFlag{Name: "checksums-pattern", Required: false},
+					&cli.StringFlag{Name: "prefix", Value: ""},
 				},
 				Action: func(ctx context.Context, c *cli.Command) error {
 					checksumsPattern := c.String("checksums-pattern")
 					res, err := ghasset.GetAsset(
-						secrets.String(c.String("token-ref")), 
-						ghasset.ReleaseAssetQuery {
-							Owner: c.String("owner"),
-							Repo: c.String("repo"),
-							Pattern: c.String("pattern"),
+						secrets.String(c.String("token-ref")),
+						ghasset.ReleaseAssetQuery{
+							Owner:            c.String("owner"),
+							Repo:             c.String("repo"),
+							Pattern:          c.String("pattern"),
 							ChecksumsPattern: &checksumsPattern,
-					})
+						})
 					if err != nil {
 						return err
 					}
@@ -73,9 +74,9 @@ func GhAssetCmd(secrets *koanf.Koanf) *cli.Command {
 			},
 			{
 				Name: "get-many",
-				Flags: []cli.Flag {
-					&cli.StringFlag { Name: "queries-file", Aliases: []string{"q"}, Required: true},
-					&cli.StringFlag { Name: "dotenv-output-file", Aliases: []string{"o"}, Value: "/dev/stdout"},
+				Flags: []cli.Flag{
+					&cli.StringFlag{Name: "queries-file", Aliases: []string{"q"}, Required: true},
+					&cli.StringFlag{Name: "dotenv-output-file", Aliases: []string{"o"}, Value: "/dev/stdout"},
 				},
 				Action: func(ctx context.Context, c *cli.Command) error {
 					queriesRaw, err := os.ReadFile(c.String("queries-file"))
@@ -89,9 +90,9 @@ func GhAssetCmd(secrets *koanf.Koanf) *cli.Command {
 						a, err := ghasset.GetAsset(
 							secrets.String(c.String("token-ref")),
 							ghasset.ReleaseAssetQuery{
-								Owner: q.Owner,
-								Repo: q.Repo,
-								Pattern: q.Pattern,
+								Owner:            q.Owner,
+								Repo:             q.Repo,
+								Pattern:          q.Pattern,
 								ChecksumsPattern: q.ChecksumsPattern,
 							},
 						)

@@ -141,13 +141,13 @@ func _makeKeyGenIOs(f func(io.Reader) ([]byte, []byte, error), output string) ([
 	}
 	priv_io := framework.FileWriteIO{
 		Path:        output,
-		Content:     priv_bytes,
+		Content:     &priv_bytes,
 		Mode:        os.O_CREATE | os.O_WRONLY | os.O_TRUNC,
 		Permissions: 0644,
 	}
 	pub_io := framework.FileWriteIO{
 		Path:        output + ".pub",
-		Content:     pub_bytes,
+		Content:     &pub_bytes,
 		Mode:        os.O_CREATE | os.O_WRONLY | os.O_TRUNC,
 		Permissions: 0644,
 	}

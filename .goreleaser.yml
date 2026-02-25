@@ -47,6 +47,7 @@ kos:
       - latest
       - "{{.Tag}}"
     bare: true
+    base_image: gcr.io/distroless/static-debian13:nonroot
     platforms:
       - linux/amd64
       - linux/arm64

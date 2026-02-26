@@ -8,6 +8,8 @@ import (
 	"log"
 	"os"
 	"os/exec"
+
+	sopsConfig "github.com/getsops/sops/v3/config"
 )
 
 type Effect interface {
@@ -158,6 +160,11 @@ func (e *SopsEncryptEffect) Apply() error {
 	args := []string{}
 	if e.ConfigPath != "" {
 		args = append(args, "--config", e.ConfigPath)
+	} else {
+		discoveredConfig, err := sopsConfig.FindConfigFile(".")
+		if err == nil {
+			args = append(args, "--config", discoveredConfig)
+		}
 	}
 	args = append(args, "encrypt", "--filename-override", e.FilenameOverride)
 
@@ -173,7 +180,11 @@ func (e *SopsEncryptEffect) Apply() error {
 			cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", key, value))
 		}
 	}
-
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("No working directory found, unknown execution environment")
+	}
+	cmd.Dir = cwd
 	// Capture stdout for encrypted output
 	var stdoutBuf, stderrBuf bytes.Buffer
 	cmd.Stdout = &stdoutBuf

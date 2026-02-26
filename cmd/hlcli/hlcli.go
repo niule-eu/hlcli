@@ -12,7 +12,8 @@ import (
 
 	"github.com/niule-eu/hlcli/internal/hlcli_cmd"
 	"github.com/niule-eu/hlcli/internal/keygen"
-	"github.com/niule-eu/hlcli/internal/netconf"
+
+	// "github.com/niule-eu/hlcli/internal/netconf"
 	"github.com/niule-eu/hlcli/internal/render"
 	"github.com/niule-eu/hlcli/pkg/config"
 	"github.com/niule-eu/hlcli/pkg/framework"
@@ -202,20 +203,20 @@ func keygen_cmd() *cli.Command {
 	}
 }
 
-func netconf_cmd() *cli.Command {
-	return &cli.Command{
-		Name: "netconf",
-		Commands: []*cli.Command{
-			{
-				Name: "get-config",
-				Action: func(ctx context.Context, c *cli.Command) error {
-					netconf.Example_ssh()
-					return nil
-				},
-			},
-		},
-	}
-}
+// func netconf_cmd() *cli.Command {
+// 	return &cli.Command{
+// 		Name: "netconf",
+// 		Commands: []*cli.Command{
+// 			{
+// 				Name: "get-config",
+// 				Action: func(ctx context.Context, c *cli.Command) error {
+// 					netconf.Example_ssh()
+// 					return nil
+// 				},
+// 			},
+// 		},
+// 	}
+// }
 
 func no_config() error {
 	p, err := xdg.ConfigFile("hlcli/config.yaml")
@@ -318,7 +319,7 @@ func main() {
 		Commands: []*cli.Command{
 			debugConfig(cliConfig),
 			keygen_cmd(),
-			netconf_cmd(),
+			// netconf_cmd(),
 			renderPklCommand(sopsSecrets),
 			hlcli_cmd.GhAssetCmd(sopsSecrets),
 			{

@@ -225,7 +225,7 @@ func RenderPkl(params RenderPklParams, secrets *koanf.Koanf) ([]framework.Effect
 				// Create compound effect: encrypt then write
 				compound := framework.CompoundEffect{
 					Effects: []framework.Effect{
-						framework.NewSopsEncryptEffect(fileWrite.Content, "", filepath.Base(fileWrite.Path), nil),
+						framework.NewSopsEncryptEffect(fileWrite.Content, "", fileWrite.Path, nil),
 						fileWrite,
 					},
 				}

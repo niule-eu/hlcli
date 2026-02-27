@@ -2,6 +2,7 @@ package render
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -9,21 +10,26 @@ import (
 
 	"github.com/knadh/koanf/v2"
 	"github.com/niule-eu/hlcli/pkg/framework"
+	testutils "github.com/niule-eu/hlcli/test"
 )
 
 func TestRenderPklWithSopsEncryption(t *testing.T) {
 	// Setup test environment
-	tempDir := t.TempDir()
-	testFile := filepath.Join(tempDir, "test.pkl")
-	outputFile := filepath.Join(tempDir, "output.yaml")
+
+	execEnv := testutils.NewSopsExecEnv(t)
+
+	testPklFile := filepath.Join(execEnv.Cwd, "test.pkl")
+	tmpYamlFile1 := execEnv.GetPartiallyEncryptedYamlPath()
+	tmpYamlFile2 := execEnv.GetPartiallyEncryptedYamlPath()
 
 	// Create a simple PKL file for testing
-	expectedYaml := `foo: bar
-data:
+	expectedYaml := fmt.Sprintf(`foo: bar
+%s:
   baz: foo
-`
-	testPklContent := `
-data = new {
+`, execEnv.EncryptedKeys[0])
+
+	testPklContent := fmt.Sprintf(`
+%s = new {
   foo = "bar"
   data {
     baz = "foo"        
@@ -32,28 +38,30 @@ data = new {
 output {
   value = data
   files {
-    ["file1.yaml"] {
+    ["%s"] {
       value = data
       renderer = new YamlRenderer {}
     }
-	["file2.yaml"] {
+	["%s"] {
       value = data
       renderer = new YamlRenderer {}
     }
   }
   renderer = new YamlRenderer {}
 }
-	`
+	`, execEnv.EncryptedKeys[0], tmpYamlFile1, tmpYamlFile2)
 
-	if err := os.WriteFile(testFile, []byte(testPklContent), 0644); err != nil {
+	if err := os.WriteFile(testPklFile, []byte(testPklContent), 0644); err != nil {
 		t.Fatalf("Failed to create test PKL file: %v", err)
 	}
 
 	// Test cases
 	t.Run("RenderPkl without SOPS encryption", func(t *testing.T) {
+		tmpFile := execEnv.GetYamlPath()
+		// t.Log(tmpFile)
 		params := RenderPklParams{
-			PklFile:            testFile,
-			OutputFile:         outputFile,
+			PklFile:            testPklFile,
+			OutputFile:         tmpFile,
 			MultipleFileOutput: false,
 			EncryptWithSops:    false,
 		}
@@ -77,7 +85,7 @@ output {
 		}
 
 		// Verify output file was created and contains expected YAML content
-		content, err := os.ReadFile(outputFile)
+		content, err := os.ReadFile(tmpFile)
 		if err != nil {
 			t.Fatalf("Failed to read output file: %v", err)
 		}
@@ -94,11 +102,14 @@ output {
 			t.Skip("SOPS binary not available, skipping SOPS encryption test")
 		}
 
+		tmpFile := execEnv.GetYamlPath()
+
 		params := RenderPklParams{
-			PklFile:            testFile,
-			OutputFile:         outputFile,
+			PklFile:            testPklFile,
+			OutputFile:         tmpFile,
 			MultipleFileOutput: false,
 			EncryptWithSops:    true,
+			EnvVars:            execEnv.EnvVars,
 		}
 
 		secrets := koanf.New(".")
@@ -143,7 +154,7 @@ output {
 		}
 
 		// Verify output file was created
-		content, err := os.ReadFile(outputFile)
+		content, err := os.ReadFile(tmpFile)
 		if err != nil {
 			t.Fatalf("Failed to read output file: %v", err)
 		}
@@ -158,8 +169,6 @@ output {
 			t.Errorf("Expected encrypted content to contain SOPS metadata, got: %s", content)
 		}
 
-		// Clean up
-		os.Remove(outputFile)
 	})
 
 	t.Run("RenderPkl with multiple file output and SOPS encryption", func(t *testing.T) {
@@ -169,10 +178,10 @@ output {
 		}
 
 		params := RenderPklParams{
-			PklFile:            testFile,
-			OutputFile:         tempDir,
+			PklFile:            testPklFile,
 			MultipleFileOutput: true,
 			EncryptWithSops:    true,
+			EnvVars:            execEnv.EnvVars,
 		}
 
 		secrets := koanf.New(".")
@@ -194,9 +203,8 @@ output {
 		}
 
 		// Verify both files were created and encrypted
-		for _, filename := range []string{"file1.yaml", "file2.yaml"} {
-			filePath := filepath.Join(tempDir, filename)
-			content, err := os.ReadFile(filePath)
+		for _, filename := range []string{tmpYamlFile1, tmpYamlFile2} {
+			content, err := os.ReadFile(filename)
 			if err != nil {
 				t.Fatalf("Failed to read file %s: %v", filename, err)
 			}
@@ -209,6 +217,16 @@ output {
 			// Content should contain SOPS metadata
 			if !bytes.Contains(content, []byte("sops:")) {
 				t.Errorf("Expected encrypted content in %s to contain SOPS metadata", filename)
+			}
+
+			// value of baz key should be encrypted
+			if !bytes.Contains(content, []byte("baz: ENC[AES256")) {
+				t.Errorf("Expected value of baz key in %s to be encrypted", filename)
+			}
+
+			// value of foo key should be unencrypted
+			if !bytes.Contains(content, []byte("foo: bar")) {
+				t.Errorf("Expected value of foo key in %s to be unencrypted", filename)
 			}
 		}
 	})

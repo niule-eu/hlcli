@@ -16,6 +16,12 @@ type Effect interface {
 	Apply() error
 }
 
+// EffectContext provides common fields for IO operations
+// Implementors of Effect interface can embed this struct to get EnvVars field
+type EffectContext struct {
+	EnvVars map[string]string // Environment variables for the operation
+}
+
 type FileWriteIO struct {
 	Path        string
 	Content     *[]byte
@@ -118,20 +124,22 @@ func (fw CompoundEffect) Apply() error {
 // Note: This effect ONLY handles in-memory encryption. File writing is handled
 // separately by FileWriteIO to maintain separation of concerns.
 type SopsEncryptEffect struct {
-	Plaintext        *[]byte           // Reference to plaintext content in memory
-	ConfigPath       string            // Optional path to SOPS configuration file
-	FilenameOverride string            // Filename override for SOPS (required when using stdin)
-	EnvVars          map[string]string // Environment variables to set for SOPS execution
+	EffectContext
+	Plaintext        *[]byte // Reference to plaintext content in memory
+	ConfigPath       string  // Optional path to SOPS configuration file
+	FilenameOverride string  // Filename override for SOPS (required when using stdin)
 }
 
 // NewSopsEncryptEffect creates a new SopsEncryptEffect with default values
 // Uses "encrypted.json" as the default filename override
 func NewDefaultSopsEncryptEffect(plaintext *[]byte) *SopsEncryptEffect {
 	return &SopsEncryptEffect{
+		EffectContext: EffectContext{
+			EnvVars: nil,
+		},
 		Plaintext:        plaintext,
 		ConfigPath:       "",
 		FilenameOverride: "encrypted.json", // Default filename override
-		EnvVars:          nil,
 	}
 }
 
@@ -139,10 +147,12 @@ func NewDefaultSopsEncryptEffect(plaintext *[]byte) *SopsEncryptEffect {
 // This constructor requires explicit values for all configuration options
 func NewSopsEncryptEffect(plaintext *[]byte, configPath string, filenameOverride string, envVars map[string]string) *SopsEncryptEffect {
 	return &SopsEncryptEffect{
+		EffectContext: EffectContext{
+			EnvVars: envVars,
+		},
 		Plaintext:        plaintext,
 		ConfigPath:       configPath,
 		FilenameOverride: filenameOverride,
-		EnvVars:          envVars,
 	}
 }
 
@@ -158,25 +168,33 @@ func (e *SopsEncryptEffect) Apply() error {
 
 	// Build SOPS command - use 'encrypt' as subcommand
 	args := []string{}
-	if e.ConfigPath != "" {
-		args = append(args, "--config", e.ConfigPath)
-	} else {
-		discoveredConfig, err := sopsConfig.FindConfigFile(".")
-		if err == nil {
-			args = append(args, "--config", discoveredConfig)
-		}
-	}
-	args = append(args, "encrypt", "--filename-override", e.FilenameOverride)
 
+	sopsConfigPath := ""
+	discoveredConfig, err := sopsConfig.FindConfigFile(".")
+	if err == nil {
+		sopsConfigPath = discoveredConfig
+	}
+
+	if e.EffectContext.EnvVars["SOPS_CONFIG"] != "" {
+		sopsConfigPath = e.EffectContext.EnvVars["SOPS_CONFIG"]
+	}
+	if e.ConfigPath != "" {
+		sopsConfigPath = e.ConfigPath
+	}
+	if sopsConfigPath != "" {
+		args = append(args, "--config", sopsConfigPath)
+	}
+
+	args = append(args, "encrypt", "--filename-override", e.FilenameOverride)
 	cmd := exec.Command("sops", args...)
 
 	// Set up stdin with plaintext
 	cmd.Stdin = bytes.NewReader(*e.Plaintext)
 
 	// Set environment variables if provided
-	if e.EnvVars != nil {
+	if e.EffectContext.EnvVars != nil {
 		cmd.Env = os.Environ()
-		for key, value := range e.EnvVars {
+		for key, value := range e.EffectContext.EnvVars {
 			cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", key, value))
 		}
 	}
@@ -192,6 +210,10 @@ func (e *SopsEncryptEffect) Apply() error {
 
 	// Execute SOPS encryption
 	if err := cmd.Run(); err != nil {
+		if bytes.Contains(stderrBuf.Bytes(), []byte("error loading config: no matching creation rules found")) {
+			log.Default().Printf("No creation rule found in %s for path %s, leaving file unencrypted.", sopsConfigPath, e.FilenameOverride)
+			return nil
+		}
 		return fmt.Errorf("sops encryption failed: %w (stderr: %s)", err, stderrBuf.String())
 	}
 

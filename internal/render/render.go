@@ -144,6 +144,7 @@ type RenderPklParams struct {
 	AllowedModules     []string
 	PklProjectFile     string
 	EncryptWithSops    bool
+	EnvVars            map[string]string
 }
 
 func RenderPkl(params RenderPklParams, secrets *koanf.Koanf) ([]framework.Effect, error) {
@@ -201,7 +202,13 @@ func RenderPkl(params RenderPklParams, secrets *koanf.Koanf) ([]framework.Effect
 			return nil, err
 		}
 		for k, v := range files {
-			eff := []framework.Effect{framework.NewDefaultFileWriteIO(filepath.Dir(params.PklFile)+"/"+k, &v)}
+			targPath := ""
+			if filepath.IsAbs(k) {
+				targPath = k
+			} else {
+				targPath = filepath.Join(filepath.Dir(params.PklFile), k)
+			}
+			eff := []framework.Effect{framework.NewDefaultFileWriteIO(targPath, &v)}
 			effects = append(effects, eff...)
 		}
 
@@ -225,7 +232,7 @@ func RenderPkl(params RenderPklParams, secrets *koanf.Koanf) ([]framework.Effect
 				// Create compound effect: encrypt then write
 				compound := framework.CompoundEffect{
 					Effects: []framework.Effect{
-						framework.NewSopsEncryptEffect(fileWrite.Content, "", fileWrite.Path, nil),
+						framework.NewSopsEncryptEffect(fileWrite.Content, "", fileWrite.Path, params.EnvVars),
 						fileWrite,
 					},
 				}

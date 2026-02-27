@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"fmt"
 	"os"
-	"os/exec"
-	"strings"
 	"testing"
+
+	testutils "github.com/niule-eu/hlcli/test"
 )
 
 func TestFileWriteIO(t *testing.T) {
@@ -144,103 +144,14 @@ func TestStdOutIO(t *testing.T) {
 
 func TestSopsEncryptEffect(t *testing.T) {
 
-	publicKey, secretKey, err := generateAgeKeyPair()
-	if err != nil {
-		t.Fatalf("Failed to generate age key pair: %v", err)
-	}
-
-	// Create a temporary .sops.yaml file with the freshly generated public key
-	// Include path_regex and encrypted_regex rules
-	sopsConfig := fmt.Sprintf(`creation_rules:
-  - path_regex: '.*hlcli-test.*\.json'
-    encrypted_regex: '^(data|stringData)$'
-    age: '%s'
-  - path_regex: '.*hlcli-test.*\.yaml'
-    encrypted_regex: '^(data|stringData)$'
-    age: '%s'
-  - age: '%s'
-`, publicKey, publicKey, publicKey)
-	tempSopsConfigFile := "temp_test_sops.yaml"
-	if err := os.WriteFile(tempSopsConfigFile, []byte(sopsConfig), 0600); err != nil {
-		t.Fatalf("Failed to create temporary .sops.yaml file: %v", err)
-	}
-	defer os.Remove(tempSopsConfigFile)
-
-	envVars := map[string]string{
-		"SOPS_AGE_KEY":        secretKey,
-		"SOPS_AGE_RECIPIENTS": "", // Clear recipients to use key directly
-	}
-
-	t.Run("successfully encrypts using local exec environment", func(t *testing.T) {
-		// Setup - check if SOPS_AGE_KEY or SOPS_AGE_KEY_FILE are set
-		ageKey := os.Getenv("SOPS_AGE_KEY")
-		ageKeyFile := os.Getenv("SOPS_AGE_KEY_FILE")
-
-		// If no age key is available, create a temporary one using the generated key
-		var tempKeyFile string
-		var cleanupFunc func()
-
-		if ageKey == "" && ageKeyFile == "" {
-			// Check if ~/.config/sops/age/keys.txt already exists
-			homeDir, err := os.UserHomeDir()
-			if err != nil {
-				t.Fatalf("Failed to get user home directory: %v", err)
-			}
-
-			existingKeyFile := homeDir + "/.config/sops/age/keys.txt"
-			if _, err := os.Stat(existingKeyFile); os.IsNotExist(err) {
-				// Create temporary keys file with the generated secret key
-				tempKeyFile = existingKeyFile
-				if err := os.MkdirAll(homeDir+"/.config/sops/age", 0755); err != nil {
-					t.Fatalf("Failed to create sops age directory: %v", err)
-				}
-
-				if err := os.WriteFile(tempKeyFile, []byte(secretKey), 0600); err != nil {
-					t.Fatalf("Failed to write temporary key file: %v", err)
-				}
-
-				cleanupFunc = func() {
-					os.Remove(tempKeyFile)
-					os.Remove(homeDir + "/.config/sops/age")
-					os.Remove(homeDir + "/.config/sops")
-				}
-				defer cleanupFunc()
-			}
-		}
-
-		// Setup - use valid JSON content
-		content := []byte(`{"test": "content", "data": "sensitive"}`)
-		originalContent := string(content)
-		effect := NewSopsEncryptEffect(&content, "", "test.json", nil)
-
-		// Test
-		err := effect.Apply()
-
-		// Verify - should succeed since sops is available
-		if err != nil {
-			t.Fatalf("Expected successful encryption, got error: %v", err)
-		}
-
-		// Verify content was modified (encrypted)
-		if string(content) == originalContent {
-			t.Error("Expected content to be encrypted, but it remained unchanged")
-		}
-
-		// Verify encrypted content contains expected SOPS structure
-		encryptedStr := string(content)
-		if !bytes.Contains(content, []byte("sops")) {
-			t.Errorf("Expected encrypted content to contain 'sops' metadata, got: %s", encryptedStr)
-		}
-		if !bytes.Contains(content, []byte("ENC[AES256_GCM")) {
-			t.Errorf("Expected encrypted content to contain encrypted data, got: %s", encryptedStr)
-		}
-	})
+	execEnv := testutils.NewSopsExecEnv(t)
 
 	t.Run("assert handles invalid JSON content gracefully", func(t *testing.T) {
 		// Setup - use invalid JSON content
 		content := []byte("not valid json")
 		originalContent := string(content)
-		effect := NewSopsEncryptEffect(&content, "", "test.json", envVars)
+		tmpPath := execEnv.GetJsonPath()
+		effect := NewSopsEncryptEffect(&content, "", tmpPath, execEnv.EnvVars)
 
 		// Test
 		err := effect.Apply()
@@ -259,7 +170,8 @@ func TestSopsEncryptEffect(t *testing.T) {
 	t.Run("assert handles empty content", func(t *testing.T) {
 		// Setup
 		content := []byte("{}") // Empty JSON object
-		effect := NewSopsEncryptEffect(&content, "", "empty.json", envVars)
+		tmpPath := execEnv.GetJsonPath()
+		effect := NewSopsEncryptEffect(&content, "", tmpPath, execEnv.EnvVars)
 
 		// Test
 		err := effect.Apply()
@@ -289,7 +201,8 @@ func TestSopsEncryptEffect(t *testing.T) {
 			}
 		}`)
 		originalContent := string(content)
-		effect := NewSopsEncryptEffect(&content, "", "secrets.json", envVars)
+		tmpPath := execEnv.GetJsonPath()
+		effect := NewSopsEncryptEffect(&content, "", tmpPath, execEnv.EnvVars)
 
 		// Test
 		err := effect.Apply()
@@ -324,56 +237,19 @@ func TestSopsEncryptEffect(t *testing.T) {
 		t.Logf("Encrypted output sample (%d bytes): %s...", len(encryptedStr), encryptedStr[:runLength])
 	})
 
-	t.Run("assert filename overrides function", func(t *testing.T) {
-		// Test with YAML filename override
-		yamlContent := []byte(`apiVersion: v1
-kind: Secret
-data:
-password: cGFzc3dvcmQ=
-`)
-		yamlEffect := NewSopsEncryptEffect(&yamlContent, "", "secret.yaml", envVars)
-		err := yamlEffect.Apply()
-		if err != nil {
-			t.Fatalf("Expected successful YAML encryption, got error: %v", err)
-		}
-
-		// Verify YAML was encrypted
-		if !bytes.Contains(yamlContent, []byte("kind:")) {
-			t.Errorf("Expected YAML content")
-		}
-		if !bytes.Contains(yamlContent, []byte("ENC[AES256_GCM")) {
-			t.Errorf("Expected ecrypted content")
-		}
-
-		// Test with JSON filename override
-		jsonContent := []byte(`{"api_key": "secret123", "token": "sensitive"}`)
-		jsonEffect := NewSopsEncryptEffect(&jsonContent, "", "config.json", envVars)
-		err = jsonEffect.Apply()
-		if err != nil {
-			t.Fatalf("Expected successful JSON encryption, got error: %v", err)
-		}
-
-		// Verify JSON was encrypted
-		if !bytes.Contains(jsonContent, []byte("\"api_key\":")) {
-			t.Errorf("Expected JSON content")
-		}
-		if !bytes.Contains(yamlContent, []byte("ENC[AES256_GCM")) {
-			t.Errorf("Expected ecrypted content")
-		}
-
-	})
-
 	t.Run("Assert .sops.yaml config file used", func(t *testing.T) {
 		// Test content to encrypt using the config file
-		content := []byte(`{
+
+		content := []byte(fmt.Sprintf(`{
 				"config_test": "this is encrypted using a .sops.yaml config file",
 				"sensitive_info": "encrypted with the generated public key",
-				"data": "foo"
-			}`)
+				"%s": "foo"
+			}`, execEnv.EncryptedKeys[0]))
 		originalContent := string(content)
+		tmpPath := execEnv.GetPartiallyEncryptedJsonPath()
 
 		// Create effect using the temporary config file
-		effect := NewSopsEncryptEffect(&content, tempSopsConfigFile, "hlcli-test.json", envVars)
+		effect := NewSopsEncryptEffect(&content, "", tmpPath, execEnv.EnvVars)
 
 		// Apply encryption
 		err := effect.Apply()
@@ -399,8 +275,6 @@ password: cGFzc3dvcmQ=
 		if !bytes.Contains(content, []byte("age")) {
 			t.Errorf("Expected encrypted content to contain age encryption info")
 		}
-		t.Logf("Successfully encrypted with .sops.yaml config:\n %s", sopsConfig)
-		t.Logf("Used public key: %s", publicKey)
 	})
 
 	t.Run("tests compound effect with SopsEncryptEffect followed by FileWriteIO", func(t *testing.T) {
@@ -416,14 +290,13 @@ password: cGFzc3dvcmQ=
 				}
 			}`)
 		originalContent := string(content)
-		outputFile := "test_encrypted_output.json"
-		defer os.Remove(outputFile)
+		tmpPath := execEnv.GetJsonPath()
 
 		// Create compound effect: encrypt then write to file
 		compoundEffect := CompoundEffect{
 			Effects: []Effect{
-				NewSopsEncryptEffect(&content, tempSopsConfigFile, "secrets.json", envVars),
-				NewDefaultFileWriteIO(outputFile, &content),
+				NewSopsEncryptEffect(&content, "", tmpPath, execEnv.EnvVars),
+				NewDefaultFileWriteIO(tmpPath, &content),
 			},
 		}
 
@@ -447,12 +320,12 @@ password: cGFzc3dvcmQ=
 		}
 
 		// Verify the file was written
-		if _, err := os.Stat(outputFile); err != nil {
+		if _, err := os.Stat(tmpPath); err != nil {
 			t.Errorf("Output file was not created: %v", err)
 		}
 
 		// Verify file content matches encrypted content
-		fileContent, err := os.ReadFile(outputFile)
+		fileContent, err := os.ReadFile(tmpPath)
 		if err != nil {
 			t.Fatalf("Failed to read output file: %v", err)
 		}
@@ -471,49 +344,4 @@ password: cGFzc3dvcmQ=
 
 		t.Logf("Successfully encrypted and wrote file (%d bytes)", len(fileContent))
 	})
-}
-
-// generateAgeKeyPair generates a fresh age key pair for testing
-func generateAgeKeyPair() (string, string, error) {
-	cmd := exec.Command("age-keygen")
-	var stdoutBuf, stderrBuf bytes.Buffer
-	cmd.Stdout = &stdoutBuf
-	cmd.Stderr = &stderrBuf
-
-	// Execute the command
-	err := cmd.Run()
-	if err != nil {
-		return "", "", fmt.Errorf("age-keygen command failed: %w, stderr: %s", err, stderrBuf.String())
-	}
-
-	// Parse the output to extract the public key
-	// age-keygen output format:
-	// # public key: age1...
-	// AGE-SECRET-KEY-1...
-	output := stdoutBuf.String()
-	lines := strings.Split(output, "\n")
-	var publicKey string
-	var secretKey string
-
-	for _, line := range lines {
-		if strings.HasPrefix(line, "# public key: ") {
-			publicKey = strings.TrimPrefix(line, "# public key: ")
-		} else if strings.HasPrefix(line, "AGE-SECRET-KEY-") {
-			secretKey = strings.TrimSpace(line)
-		}
-	}
-
-	// Validate that we got both keys
-	if publicKey == "" || secretKey == "" {
-		return "", "", fmt.Errorf("age-keygen output parsing failed: publicKey='%s', secretKey='%s', output='%s'",
-			publicKey, secretKey, output)
-	}
-
-	return publicKey, secretKey, nil
-}
-
-// Test helper to create a byte slice reference for testing
-func makeByteSliceRef(content string) *[]byte {
-	result := []byte(content)
-	return &result
 }

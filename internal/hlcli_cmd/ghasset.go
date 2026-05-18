@@ -23,7 +23,7 @@ func writeAsset(path string, assets ...*ghasset.ReleaseAssetResult) (framework.E
 		prefix := nonAlphanumericRegex.ReplaceAllString(
 			strings.ToUpper(fmt.Sprintf("%s_%s_", asset.Owner, asset.Repo)), "_",
 		)
-		parts := []string{prefix, "TAG=", asset.Tag, "\n", prefix, "URL=", asset.Url, "\n"}
+		parts := []string{prefix, "TAG=", asset.Tag, "\n", prefix, "TAG_NO_V=", asset.TagVStripped, "\n", prefix, "URL=", asset.Url, "\n"}
 		if asset.Hash != nil {
 			parts = append(parts, prefix, "HASH=", asset.Hash.Value, "\n")
 		}

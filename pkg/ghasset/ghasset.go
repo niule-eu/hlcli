@@ -25,11 +25,12 @@ type Checksum struct {
 }
 
 type ReleaseAssetResult struct {
-	Owner string
-	Repo  string
-	Tag   string
-	Url   string
-	Hash  *Checksum
+	Owner        string
+	Repo         string
+	Tag          string
+	TagVStripped string
+	Url          string
+	Hash         *Checksum
 }
 
 func getAssetByPattern(assets []*github.ReleaseAsset, pattern string) *github.ReleaseAsset {
@@ -109,11 +110,13 @@ func GetAsset(token string, raq ReleaseAssetQuery) (*ReleaseAssetResult, error) 
 	if err != nil {
 		return nil, err
 	}
+	tag_no_v, _ := strings.CutPrefix(*release.TagName, "v")
 	return &ReleaseAssetResult{
-		Tag:   *release.TagName,
-		Url:   *asset.URL,
-		Hash:  checksum,
-		Owner: raq.Owner,
-		Repo:  raq.Repo,
+		Tag:          *release.TagName,
+		TagVStripped: tag_no_v,
+		Url:          *asset.URL,
+		Hash:         checksum,
+		Owner:        raq.Owner,
+		Repo:         raq.Repo,
 	}, nil
 }
